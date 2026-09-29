@@ -1,9 +1,15 @@
 import SwiftUI
+import SwiftData
 
 @main
 struct TrackeenApp: App {
     // Showing the splash first, then the real app
     @State private var isShowingSplash = true
+
+    init() {
+        // Putting Forum into the navigation bar and tab bar before anything draws
+        TrackeenAppearance.apply()
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -17,5 +23,7 @@ struct TrackeenApp: App {
                 ContentView()
             }
         }
+        // Setting up the database that stores logged drinks and custom drinks
+        .modelContainer(for: [CaffeineEntry.self, CustomDrink.self])
     }
 }
