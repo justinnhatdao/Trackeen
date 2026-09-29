@@ -9,6 +9,9 @@ struct LogDrinkView: View {
     // refreshing the ring after a save.
     @State private var todayEntries: [CaffeineEntry] = []
 
+    // Counting every saved drink, not just today's, so a date problem is obvious
+    @State private var totalSavedCount = 0
+
     // Reading the limit the user set in Settings
     @AppStorage(CaffeineGuidelines.dailyLimitStorageKey)
     private var dailyLimit = CaffeineGuidelines.defaultDailyLimitMilligrams
@@ -38,21 +41,35 @@ struct LogDrinkView: View {
         chosenDrink.caffeineAmount(for: amountValue)
     }
 
+    // Falling back to the default if the stored limit ever reads as zero
+    private var effectiveDailyLimit: Double {
+        dailyLimit > 0 ? dailyLimit : CaffeineGuidelines.defaultDailyLimitMilligrams
+    }
+
     // Adding up everything logged today
     private var todayTotalMilligrams: Double {
         todayEntries.reduce(0) { $0 + $1.caffeineMilligrams }
     }
 
     // Reading today's drinks back out of the database
+    // Everything is fetched and then filtered in Swift on purpose. A #Predicate
+    // that fails throws at fetch time, and swallowing that error looks exactly
+    // like having no drinks, which is what hid this bug before.
     private func refreshToday() {
-        let startOfToday = Calendar.current.startOfDay(for: Date())
-
         let descriptor = FetchDescriptor<CaffeineEntry>(
-            predicate: #Predicate { $0.dateConsumed >= startOfToday },
             sortBy: [SortDescriptor(\.dateConsumed, order: .reverse)]
         )
 
-        todayEntries = (try? modelContext.fetch(descriptor)) ?? []
+        do {
+            let everyEntry = try modelContext.fetch(descriptor)
+            let calendar = Calendar.current
+            totalSavedCount = everyEntry.count
+            todayEntries = everyEntry.filter { calendar.isDateInToday($0.dateConsumed) }
+        } catch {
+            todayEntries = []
+            totalSavedCount = 0
+            saveErrorMessage = "Could not read your drinks: \(error.localizedDescription)"
+        }
     }
 
     var body: some View {
@@ -66,8 +83,17 @@ struct LogDrinkView: View {
             }
             .scrollContentBackground(.hidden)
             .background(Color.trackeenCream)
-            .navigationTitle("Log a Drink")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                // Showing the wordmark instead of a plain title
+                ToolbarItem(placement: .principal) {
+                    Text("TRACKEEN")
+                        .font(.forum(24))
+                        .tracking(5)
+                        .padding(.leading, 5)
+                        .foregroundStyle(Color.trackeenBrown)
+                }
+
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         showingSettings = true
@@ -85,7 +111,7 @@ struct LogDrinkView: View {
                     .font(.forum(17))
                 }
             }
-            .sheet(isPresented: $showingSettings) {
+            .sheet(isPresented: $showingSettings, onDismiss: refreshToday) {
                 SettingsView()
             }
             .alert("Drink saved", isPresented: $showingSavedMessage) {
@@ -96,11 +122,7 @@ struct LogDrinkView: View {
             } message: {
                 Text(saveErrorMessage ?? "")
             }
-            // Starting with a normal serving already filled in
             .onAppear {
-                if amountText.isEmpty {
-                    amountText = formattedAmount(chosenDrink.defaultAmount)
-                }
                 refreshToday()
             }
         }
@@ -117,10 +139,10 @@ struct LogDrinkView: View {
             VStack(spacing: 8) {
                 CaffeineRingView(
                     totalMilligrams: todayTotalMilligrams,
-                    limitMilligrams: dailyLimit
+                    limitMilligrams: effectiveDailyLimit
                 )
 
-                Text(todayDrinkCount == 1 ? "1 drink today" : "\(todayDrinkCount) drinks today")
+                Text("\(todayDrinkCount) today, \(totalSavedCount) saved in total")
                     .font(.forum(15))
                     .foregroundStyle(Color.trackeenLightBrown)
             }
@@ -173,9 +195,9 @@ struct LogDrinkView: View {
         } header: {
             Text("Amount").trackeenSectionHeader()
         }
-        // Filling in a normal serving whenever the drink changes
+        // Clearing the amount when the drink changes, the unit changes with it
         .onChange(of: chosenDrink) {
-            amountText = formattedAmount(chosenDrink.defaultAmount)
+            amountText = ""
         }
     }
 
@@ -217,13 +239,6 @@ struct LogDrinkView: View {
         }
     }
 
-    // Showing the serving without a trailing .0 on whole numbers
-    private func formattedAmount(_ amount: Double) -> String {
-        amount == amount.rounded()
-            ? String(Int(amount))
-            : String(format: "%.1f", amount)
-    }
-
     // Saving the entry, stamping it with the current time, and clearing the form
     private func saveDrink() {
         let newEntry = CaffeineEntry(
@@ -255,7 +270,23 @@ struct LogDrinkView: View {
     }
 }
 
+// Filling the preview with a couple of drinks so the ring is not empty
+// Saving in the preview does not stick, the database here is throwaway.
+// Run the app with Cmd+R to test saving for real.
 #Preview {
-    LogDrinkView()
-        .modelContainer(for: CaffeineEntry.self, inMemory: true)
+    let container = try! ModelContainer(
+        for: CaffeineEntry.self, CustomDrink.self,
+        configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+    )
+
+    container.mainContext.insert(CaffeineEntry(
+        drinkName: DrinkType.brewedCoffee.rawValue,
+        amount: 8,
+        unit: MeasurementUnit.fluidOunces.rawValue,
+        caffeineMilligrams: DrinkType.brewedCoffee.caffeineAmount(for: 8),
+        pricePaid: 3.50
+    ))
+
+    return LogDrinkView()
+        .modelContainer(container)
 }

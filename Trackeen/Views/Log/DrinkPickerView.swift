@@ -14,10 +14,28 @@ struct DrinkPickerView: View {
     // not refreshing after a save.
     @State private var customDrinks: [CustomDrink] = []
 
+    // Remembering the starred drinks between launches
+    @AppStorage(FavoriteDrinks.storageKey) private var favoriteNamesText = ""
+
     @State private var showingAddDrink = false
+
+    // Gathering every drink the user could pick, built in and custom
+    private var everyDrink: [ChosenDrink] {
+        DrinkType.allCases.map(ChosenDrink.init) + customDrinks.map(ChosenDrink.init)
+    }
+
+    // Listing the starred drinks, newest star last, skipping any that were deleted
+    private var favoriteDrinks: [ChosenDrink] {
+        FavoriteDrinks.names(in: favoriteNamesText)
+            .compactMap { name in everyDrink.first { $0.name == name } }
+    }
 
     var body: some View {
         List {
+            if !favoriteDrinks.isEmpty {
+                favoritesSection
+            }
+
             addYourOwnSection
 
             if !customDrinks.isEmpty {
@@ -27,13 +45,7 @@ struct DrinkPickerView: View {
             ForEach(DrinkCategory.allCases, id: \.self) { category in
                 Section {
                     ForEach(DrinkType.drinks(in: category)) { drink in
-                        let drinkOption = ChosenDrink(drink)
-
-                        Button {
-                            choose(drinkOption)
-                        } label: {
-                            drinkRow(for: drinkOption)
-                        }
+                        drinkRow(for: ChosenDrink(drink))
                     }
                 } header: {
                     Text(category.rawValue).trackeenSectionHeader()
@@ -51,6 +63,17 @@ struct DrinkPickerView: View {
             AddCustomDrinkView { newDrink in
                 choose(ChosenDrink(newDrink))
             }
+        }
+    }
+
+    // Putting the starred drinks at the top where they are quick to reach
+    private var favoritesSection: some View {
+        Section {
+            ForEach(favoriteDrinks, id: \.name) { drink in
+                drinkRow(for: drink)
+            }
+        } header: {
+            Text("Favorites").trackeenSectionHeader()
         }
     }
 
@@ -74,11 +97,7 @@ struct DrinkPickerView: View {
     private var myDrinksSection: some View {
         Section {
             ForEach(customDrinks) { customDrink in
-                Button {
-                    choose(ChosenDrink(customDrink))
-                } label: {
-                    drinkRow(for: ChosenDrink(customDrink))
-                }
+                drinkRow(for: ChosenDrink(customDrink))
             }
             .onDelete(perform: deleteCustomDrinks)
         } header: {
@@ -86,9 +105,19 @@ struct DrinkPickerView: View {
         }
     }
 
-    // Showing one drink with its rate, and a checkmark when it is the chosen one
+    // Showing one drink with its rate, a star to favorite it, and a checkmark
+    // when it is the chosen one
+    // The star is its own button so tapping it does not also pick the drink.
     private func drinkRow(for drink: ChosenDrink) -> some View {
-        HStack {
+        HStack(spacing: 12) {
+            Button {
+                toggleFavorite(drink)
+            } label: {
+                Image(systemName: isFavorite(drink) ? "star.fill" : "star")
+                    .foregroundStyle(isFavorite(drink) ? .yellow : Color.trackeenLightBrown)
+            }
+            .buttonStyle(.borderless)
+
             VStack(alignment: .leading, spacing: 2) {
                 Text(drink.name)
                     .font(.forum(18))
@@ -106,6 +135,20 @@ struct DrinkPickerView: View {
                     .foregroundStyle(Color.trackeenBrown)
             }
         }
+        // Making the whole row tappable, not just the text
+        .contentShape(Rectangle())
+        .onTapGesture {
+            choose(drink)
+        }
+    }
+
+    private func isFavorite(_ drink: ChosenDrink) -> Bool {
+        FavoriteDrinks.contains(drink.name, in: favoriteNamesText)
+    }
+
+    // Starring or unstarring a drink
+    private func toggleFavorite(_ drink: ChosenDrink) {
+        favoriteNamesText = FavoriteDrinks.toggling(drink.name, in: favoriteNamesText)
     }
 
     // Reading the user's own drinks back out of the database
