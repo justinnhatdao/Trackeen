@@ -6,6 +6,9 @@ extension Color {
     static let trackeenCream = Color(red: 0.98, green: 0.96, blue: 0.92)
     static let trackeenBrown = Color(red: 0.31, green: 0.20, blue: 0.13)
     static let trackeenLightBrown = Color(red: 0.55, green: 0.40, blue: 0.29)
+
+    // Using green only for the spending line, so money reads differently to caffeine
+    static let trackeenGreen = Color(red: 0.10, green: 0.60, blue: 0.35)
 }
 
 // Using the bundled Forum font everywhere instead of retyping the name

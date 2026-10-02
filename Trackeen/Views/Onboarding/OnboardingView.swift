@@ -44,9 +44,11 @@ struct OnboardingView: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                introSection
-                weightSection
+            VStack(alignment: .leading, spacing: 0) {
+                introHeader
+
+                Form {
+                    weightSection
                 ageSection
                 situationSection
 
@@ -54,11 +56,15 @@ struct OnboardingView: View {
                     resultSection
                 }
 
-                buttonsSection
+                    buttonsSection
+                }
+                .scrollContentBackground(.hidden)
+                // Trimming the gap a grouped list leaves above its first section
+                .contentMargins(.top, 0, for: .scrollContent)
             }
-            .scrollContentBackground(.hidden)
             .background(Color.trackeenCream)
-            .navigationTitle("Welcome")
+            // Hiding the bar completely, the heading above does that job
+            .toolbar(.hidden, for: .navigationBar)
             .toolbar {
                 ToolbarItemGroup(placement: .keyboard) {
                     Spacer()
@@ -69,21 +75,20 @@ struct OnboardingView: View {
         }
     }
 
-    // Saying what the questions are for
-    private var introSection: some View {
-        Section {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("A few quick questions")
-                    .font(.forum(24))
-                    .foregroundStyle(Color.trackeenBrown)
+    // Saying what the questions are for, sitting above the form
+    private var introHeader: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("A few quick questions")
+                .font(.forum(28))
+                .foregroundStyle(Color.trackeenBrown)
 
-                Text("These set your daily caffeine limit. You can change it any time in Settings, or skip and use the standard 400 mg.")
-                    .font(.forum(15))
-                    .foregroundStyle(Color.trackeenLightBrown)
-            }
-            .padding(.vertical, 4)
-            .listRowBackground(Color.clear)
+            Text("These set your daily caffeine limit. You can change it any time in Settings, or skip and use the standard 400 mg.")
+                .font(.forum(15))
+                .foregroundStyle(Color.trackeenLightBrown)
         }
+        .padding(.horizontal, 20)
+        .padding(.top, 12)
+        .padding(.bottom, 4)
     }
 
     private var weightSection: some View {
